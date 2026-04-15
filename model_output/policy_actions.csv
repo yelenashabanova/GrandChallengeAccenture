@@ -1,0 +1,21 @@
+feature,mean_abs_shap,ridge_coef,ridge_direction,recommended_action
+num__PM2_5_lag1,3.5892239625952245,1.7351381604969458,increase,Deploy early warning + short-term interventions when persistence is high
+num__PM2_5_lag2,0.6616277825325204,3.5735851610841523,increase,Deploy early warning + short-term interventions when persistence is high
+num__month_sin,1.0996052754875452,-1.8666352518765923,decrease,Target seasonal campaigns and winter anti-inversion policies
+num__month_cos,1.48037144089942,1.349500147806971,increase,Target seasonal campaigns and winter anti-inversion policies
+num__Longitude,0.715170951860999,0.9336313481066654,increase,Use place-based local plans by geography
+num__PM2_5_roll3_mean,0.4301276385711512,1.3399368860559209,increase,Deploy early warning + short-term interventions when persistence is high
+num__Temp_Mean,0.4315507570923658,-1.161482078287155,decrease,Target seasonal campaigns and winter anti-inversion policies
+num__Temp_Mean_lag1,0.5035569543034429,0.8457144665387115,increase,Target seasonal campaigns and winter anti-inversion policies
+num__PM2_5_roll3_std,0.1984272504079709,2.03948309748911,increase,Deploy early warning + short-term interventions when persistence is high
+num__PM2_5_lag3,0.1621739158855655,-2.199792337362384,decrease,Deploy early warning + short-term interventions when persistence is high
+num__Wind_Speed,0.2219094526388413,-1.1550373577746302,decrease,Use ventilation corridors in urban planning
+num__NO2_lag1,0.3261717821126776,-0.7170499007446625,decrease,Prioritize traffic/combustion emission reduction in hotspots
+num__Precipitation_lag1,0.306098612185064,0.6609429656605926,increase,Plan seasonal mitigation for dry periods
+num__Precipitation,0.4623501485312862,0.4123818413095731,increase,Plan seasonal mitigation for dry periods
+num__Wind_Speed_lag1,0.2717731059796733,0.6283183679910976,increase,Use ventilation corridors in urban planning
+num__PM10_lag1,0.0958281581127221,1.1987650510318533,increase,Prioritize traffic/combustion emission reduction in hotspots
+num__Latitude,0.1867904342578533,0.47144389663537,increase,Use place-based local plans by geography
+num__Altitude,0.1203190258112099,-0.6856881490385032,decrease,Use place-based local plans by geography
+num__O3_lag1,0.1121115109454528,-0.7109161990641781,decrease,Investigate targeted local intervention
+cat__Station_Area_Suburban,0.0256743543667846,1.1510809326246143,increase,"Design station-type/area specific plans (traffic vs background, urban vs suburban/rural)"
