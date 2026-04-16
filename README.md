@@ -1,6 +1,6 @@
 # A decade of Air Pollution and Pm2.5 Risk
  
-**Team Members:** Yelena Shabanova (320991), Alena Seliutina (323591),Alisa Lamina (), Luis Fernando Henriquez Patino (314661)
+**Team Members:** Yelena Shabanova (320991), Alena Seliutina (323591), Alisa Lamina (321961), Luis Fernando Henriquez Patino (314661)
 > **Mission:** Air pollution remains one of the most critical public health challenges in Europe. PM2.5 — fine particulate matter smaller than 2.5 micrometers — can penetrate deep into the lungs and enter the bloodstream, causing respiratory inflammation, reduced lung function, and increased mortality risk. This project analyses ten years of EEA air quality data to understand the **spatial and urban drivers of PM2.5** 
 > and build a model capable of predicting pollution levels across locations.
 
@@ -73,40 +73,28 @@ We used the following libraries throughout the project:
 ├── df_model.csv                # Annual feature matrix (output of features.ipynb)
 └── df_model_monthly.csv        # Monthly feature matrix with lags and weather
 ```
-
-### External Data Required (CHECK)
-
-| Dataset | Source | Purpose |
-|---|---|---|
-| EEA Annual Air Quality Statistics (2015–2024) | [EEA](https://www.eea.europa.eu/) | Core pollution measurements |
-| ISTAT Comuni boundaries (2024) | ISTAT | Spatial join for missing City values |
-| UN City Population dataset | [UN Data](https://data.un.org/) | Population by city and year |
-| ISTAT Population 2024 | ISTAT | Fallback population values |
-| CORINE Land Cover 2018 | EEA | Green space ratio per station |
-| OpenAQ API | [OpenAQ](https://openaq.org/) | Monthly PM2.5 measurements (2020–2024) |
-| Open-Meteo Archive API | [Open-Meteo](https://open-meteo.com/) | Monthly temperature, wind, precipitation |
-
-
-
-External + internal data for the project
-
-| Dataset | Link | Purpose |
-|---|---|---|
-| EEA Air Quality Data (2015–2024) | [Source](https://www.eea.europa.eu/) • [2015–2024 Raw](2015-2024/) | Core pollution measurements across European stations |
-| OpenAQ PM2.5 Data | [API](https://openaq.org/) • [Raw](openaq/openaq_monthly_raw.csv) | Monthly PM2.5 observations for temporal modeling |
-| OpenAQ Coverage & Sensors | [API](https://openaq.org/) • [Coverage](openaq/openaq_coverage.csv) • [Sensors](openaq/openaq_sensors.csv) | Data reliability and station metadata |
-| Weather Data (Temperature, Wind, Precipitation) | [API](https://open-meteo.com/) • [Processed](weather/weather_monthly.csv) | Environmental drivers of pollution |
-| Land Cover / Green Area | [EEA CORINE](https://www.eea.europa.eu/) • [Processed](LandCover2018/green_ratio.csv) | Green space ratio per location |
-| Administrative Boundaries (ISTAT Comuni 2024) | ISTAT • [Shapefiles](data_boundaries/comuni_2024/) | Spatial joins and city-level aggregation |
-| Population Data | [UN Data](https://data.un.org/) • ISTAT • [Final](joined_commune.csv) | Population density and urban activity features |
-| Country Comparison Subsets | Internal • [AT/CH/FR](country_comparison/) | Cross-country pollution analysis |
 ---
 
-## 2. Data Sources
+## 2. Data Sources 
+Complete table of all used datasets:
+
+| Dataset | External Source                                                                                                                                                                        | Internal Data | Purpose |
+|---|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---|---|
+| EEA Air Quality Data (2015–2024) | [EEA](https://discomap.eea.europa.eu/App/AQViewer/index.html?fqn=Airquality_Dissem.b2g.AirQualityStatistics)                                                                           | [2015–2024 Raw](2015-2024/) | Core pollution measurements across European stations |
+| OpenAQ PM2.5 Data | [OpenAQ API](https://openaq.org/)                                                                                                                                                      | [Raw](openaq/openaq_monthly_raw.csv) | Monthly PM2.5 observations for temporal modeling |
+| OpenAQ Coverage & Sensors | [OpenAQ API](https://openaq.org/)                                                                                                                                                      | [Coverage](openaq/openaq_coverage.csv) • [Sensors](openaq/openaq_sensors.csv) | Data reliability and station metadata |
+| Weather Data (Temperature, Wind, Precipitation) | [Open-Meteo](https://open-meteo.com/)                                                                                                                                                  | [Processed](weather/weather_monthly.csv) | Environmental drivers of pollution |
+| Land Cover / Green Area | [EEA CORINE](https://land.copernicus.eu/en/products/corine-land-cover/clc2018)                                                                                                         | [Green Ratio](LandCover2018/green_ratio.csv) | Green space ratio per location |
+| Administrative Boundaries (ISTAT Comuni 2024) | [ISTAT](https://www.istat.it/notizia/confini-delle-unita-amministrative-a-fini-statistici-al-1-gennaio-2018-2/)                                                                        | [Shapefiles](data_boundaries/comuni_2024/) | Spatial joins and city-level aggregation |
+| Population Data | [UN Data](https://data.un.org/) • [ISTAT](https://esploradati.istat.it/databrowser/#/en/dw/categories/IT1,POP,1.0/POP_POPULATION/DCIS_POPORESBIL1/IT1,22_315_DF_DCIS_POPORESBIL1_1,1.0) | [Final Dataset](joined_commune.csv) | Population density and urban activity features |
+| Country Comparison Subsets | [EEA](https://discomap.eea.europa.eu/App/AQViewer/index.html?fqn=Airquality_Dissem.b2g.AirQualityStatistics) | [AT / CH / FR](country_comparison/) | Cross-country pollution analysis |
+
+
 
 ### EEA Annual Air Quality Statistics
 
-The core dataset consists of **10 separate CSV files** (one per year, 2015–2024) published by the European Environment Agency. After merging, the combined dataset contains approximately **468,000 observations** from monitoring stations across Europe, with a focus on Italy.
+The core dataset consists of **10 separate CSV files** (one per year, 2015–2024) published by the European Environment Agency. 
+After merging, the combined dataset contains approximately **468,000 observations** from monitoring stations across Europe, with a focus on Italy.
 
 
 ### Country Comparison Dataset
@@ -155,8 +143,8 @@ This section answers: can we trust this data, and where are the gaps?
 ![distribution_of_data_coverage](images/distribution_of_data_coverage.png)
 
 **Aggregation types:** Each row represents a statistical summary, not a raw reading. Multiple aggregation types exist per station per year. 
-#%% md
-## Aggregation Process Breakdown
+
+#### Aggregation Process Breakdown
 
 Each row does not represent a direct sensor reading. It represents a statistical summary of an entire year.
 Different rows for the same station and year represent different statistics:
@@ -165,12 +153,8 @@ annual median, annual maximum, annual 99th percentile, and so on.
 For further analysis, we consistently used the annual median (P1Y-day-per50),
 which is the 50th percentile of daily values over a full year.
 
-
 ![top_15_aggregation_processes.png](images/top_15_aggregation_processes.png)
 
->  **Leakage note:** Data Coverage, Verification, and Calculation Time are reporting-time metadata.
-They would not be available at prediction time, so they must never be used as model features.
-We study them here only to assess data quality.
 ---
 
 ### [3.2 Pollutant Distributions](eda.ipynb#eda-pollutant-distributions)
@@ -222,7 +206,7 @@ Three events make this decade analytically interesting: **COVID-19 lockdowns (20
 suggesting that industrial combustion and fuel-related emissions have improved steadily over the last decade, though at a slower pace than traffic-related pollutants
 ![Secondary pollutant trends](images/YoY_secondary_pollutans_median.png)
 
->  **Important note:** Since there is no 2014 data, it's impossible to calculate 2015 change
+>  **Important note:** Since there is no 2014 data, it's impossible to calculate 2015 change.
 > 
 > **Connection to [Feature Engineering](#4-feature-engineering):** The COVID drop and year-over-year variation confirm that `Year` and `Season` carry real temporal signal. 
 > Monthly lag features (PM2.5_lag1/2/3) are motivated by the persistence of pollution trends observed here.
