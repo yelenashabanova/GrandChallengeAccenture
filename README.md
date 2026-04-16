@@ -1,649 +1,512 @@
-# GrandChallengeAccenture
-
-# 1. Introduction
-
-
-Air pollution is one of the most significant environmental and public health challenges in Europe. Among the different pollutants monitored by environmental agencies, fine particulate matter (PM2.5) is particularly harmful because it can penetrate deep into the lungs and bloodstream.
-
-The main goal of the full project is to predict future Air Quality Index (AQI) values or flag regulatory limit exceedances using machine learning across European countries, with a particular focus on Italy, in order to understand the patterns and potential drivers of PM2.5 pollution.
-
-Analyse pollutant levels in European cities using 10 years of annual air quality statistics (2015–2024) published by the European Environment Agency (EEA).
-
-The insights we got by this analysis are particularly relevant for different audiences:
-
-- Public health authorities
-- Environmental protection agencies
-- Urban policy makers
-
-These stakeholders rely on air quality monitoring data to identify pollution hotspots, evaluate environmental policies, and design strategies to reduce population exposure to harmful pollutants.
-
-Our goal is therefore not only to explore the dataset, but also to move toward identifying factors that could explain and eventually predict PM2.5 pollution levels. Here we are going to explain our decisions based on the analyses, which led to picking this specific pollutant.
+# A decade of Air Pollution and Pm2.5 Risk
+### Grand Challenge Accenture 
+**Team Members:** Alena Seliutina (323591),  Yelena Shabanova (320991), Luis Fernando Henriquez Patino (314661)
+> **Mission:** Air pollution remains one of the most critical public health challenges in Europe. PM2.5 — fine particulate matter smaller than 2.5 micrometers — can penetrate deep into the lungs and enter the bloodstream, causing respiratory inflammation, reduced lung function, and increased mortality risk. This project analyses ten years of EEA air quality data to understand the **spatial and urban drivers of PM2.5** 
+> and build a model capable of predicting pollution levels across locations.
 
 ---
 
-# 2. Data Flaws and Data Story
+## Table of Contents
 
+1. [Project Setup](#1-project-setup)
+2. [Data Sources](#2-data-sources)
+3. [Exploratory Data Analysis](#3-exploratory-data-analysis)
+4. [Feature Engineering](#4-feature-engineering)
+5. [Modeling](#5-modeling)
+6. [Conclusion & Business Insights](#6-conclusion--business-insights)
 
-Firstly, we had to analyze the data provided. The main datasets used in the project include:
+---
 
-## 2.1 Firstly, we analyzed the raw data provided
+## 1. Project Setup
 
-The core dataset comes from the EEA Annual Air Quality Statistics (e-Reporting) and covers the period 2015--2024. Instead of one single file, the data was provided as 10 separate CSV files, one for each year, which we then combined into one main DataFrame.
+### Environment
 
-After concatenation, the dataset contains:
+The project runs on **Python 3.10+**. All heavy geospatial and ML dependencies are listed below.
 
-- $468{,}481$ rows
-- $27$ columns
+```bash
+pip install pandas numpy matplotlib seaborn plotly kaleido
+pip install geopandas shapely fiona pyproj
+pip install scikit-learn xgboost shap
+pip install requests
+```
 
-Each row represents:
+### Repository Structure
 
-$$
-\text{one monitoring station} \times \text{one pollutant} \times \text{one annual statistical summary} \times \text{one year}
-$$
+```
+├── 2015-2024/                  # Raw EEA CSVs — one file per year
+│   └── DataExtract{year}.csv
+├── country_comparison/         # Neighbouring countries data (FR, CH, AT)
+├── data_boundaries/            # ISTAT comuni shapefile (2024)
+│   └── comuni_2024/
+├── LandCover2018/              # CORINE Land Cover GDB + computed green_ratio.csv
+├── openaq/                     # Cached OpenAQ API outputs (coverage, sensors, monthly)
+├── weather/                    # Cached Open-Meteo monthly weather
+├── model_output/               # CSVs exported by model.ipynb
+├── images/                     # All charts and maps referenced in this README
+├── eda.ipynb                   # Exploratory Data Analysis
+├── features.ipynb              # Feature Engineering Pipeline → df_model_monthly.csv
+├── model.ipynb                 # Three models + comparison
+├── df_model.csv                # Annual feature matrix (output of features.ipynb)
+└── df_model_monthly.csv        # Monthly feature matrix with lags and weather
+```
 
-The rows are not raw sensor-by-sensor hourly measurements. They are already aggregated annual air quality statistics, such as annual means, percentiles, maxima, or daily-based summaries.
+### External Data Required
 
-### Supporting outputs
+| Dataset | Source | Purpose |
+|---|---|---|
+| EEA Annual Air Quality Statistics (2015–2024) | [EEA](https://www.eea.europa.eu/) | Core pollution measurements |
+| ISTAT Comuni boundaries (2024) | ISTAT | Spatial join for missing City values |
+| UN City Population dataset | [UN Data](https://data.un.org/) | Population by city and year |
+| ISTAT Population 2024 | ISTAT | Fallback population values |
+| CORINE Land Cover 2018 | EEA | Green space ratio per station |
+| OpenAQ API | [OpenAQ](https://openaq.org/) | Monthly PM2.5 measurements (2020–2024) |
+| Open-Meteo Archive API | [Open-Meteo](https://open-meteo.com/) | Monthly temperature, wind, precipitation |
 
-[images/raw_data_head.png](images/raw_data_head.png)
+---
 
-[images/data_dimensions.png](images/data_dimensions.png)
+## 2. Data Sources
 
-## 2.2 What information was available in the raw dataset
+### EEA Annual Air Quality Statistics
 
-From the raw data preview and column inspection, we identified several groups of variables.
+The core dataset consists of **10 separate CSV files** (one per year, 2015–2024) published by the European Environment Agency. After merging, the combined dataset contains approximately **468,000 observations** from monitoring stations across Europe, with a focus on Italy.
 
-### 2.2.1 Identification and network information
 
-These columns describe the monitoring network and station identity:
+### Country Comparison Dataset
 
-- Country
-- Air Quality Network
-- Air Quality Network Name
-- Air Quality Station EoI Code
-- Air Quality Station Name
-- Sampling Point Id
+To contextualise Italian pollution levels, additional data was loaded for **France (FR), Switzerland (CH), and Austria (AT)** from the `country_comparison/` folder. This allows direct cross-border comparisons of pollutant medians.
 
-### 2.2.2 Pollutant information
+### Population Data (UN + ISTAT)
 
-These columns tell us what pollutant is being measured:
+The EEA `City Population` field was nearly static across years, making demographic trend analysis impossible. Two external sources were merged:
 
-- Air Pollutant
-- Air Pollutant Description
-- Unit Of Air Pollution Level
+- **Primary:** UN World Urbanization Prospects (city-level, yearly) — years with missing values were filled conservatively with the minimum of the adjacent available years.
+- **Fallback:** ISTAT municipal population (December 2024) — applied to cities not matched in the UN dataset.
 
-The raw dataset contains $38$ pollutant labels, although we later focused on the most relevant pollutants for analysis.
+### CORINE Land Cover 2018
 
-### 2.2.3 Aggregation / reporting information
+The CORINE Land Cover 2018 vector dataset (100 m resolution, Italy) was used to compute a `green_ratio` for each monitoring station's municipality — the share of agricultural and forest area over total comune area (see [Feature Engineering](#4-feature-engineering)).
 
-These columns explain how the reported value was computed:
+### OpenAQ (Monthly Data, 2020–2024)
 
-- Data Aggregation Process Id
-- Data Aggregation Process
+EEA data provides annual aggregates only. To capture **seasonal dynamics** (e.g. winter temperature inversions in the Po Valley), monthly PM2.5 measurements were pulled from the OpenAQ v3 API for matched Italian stations. Coverage was restricted to 2020–2024 where PM2.5 sensor availability was sufficient (145 sensors vs. only 20 before 2020).
 
-This is a key point of the dataset: each value corresponds to an annual aggregation process, not to a raw reading.
+---
 
-### 2.2.4 Measurement information
+## 3. Exploratory Data Analysis
 
-These are the main analytical variables:
 
-- Year
-- Air Pollution Level
-- Data Coverage
-- Verification
+Pollution is not distributed equally across regions. Its levels are influenced by geography, urban infrastructure, and human activity. The EDA is structured to progressively reveal these drivers and motivate every feature included in the final model.
+> **`eda.ipynb`** — Full EDA including data quality checks, univariate distributions, temporal trends, geographic patterns, and identification of key features for modelling.
 
-### 2.2.5 Spatial and contextual information
 
-These variables describe the station location and setting:
+### 3.1 Data Quality Assessment
 
-- Air Quality Station Type
-- Air Quality Station Area
-- Longitude
-- Latitude
-- Altitude
-- City
+Before drawing any conclusions, we need to understand how complete and trustworthy the data is.
+Data quality problems — missing values, incomplete year coverage, unvalidated entries — can produce misleading charts and wrong conclusions if ignored.
+This section answers: can we trust this data, and where are the gaps?
 
-### Supporting outputs
 
-[images/raw_data_columns.png](images/raw_data_columns.png)
+**Missing values:**
+- `City` was missing for ~62% of records. For Italy, missing cities were recovered by spatially joining station coordinates (lat/lon) with ISTAT `comuni` boundaries using GeoPandas — assigning each station to its municipality.
+- Negative pollution measurements (physically impossible) were flagged as reporting errors and removed.
 
-[images/raw_data_describe.png](images/raw_data_describe.png)
+![missing_value_barchart.png](images/missing_value_barchart.png)
 
-## 2.3 Additional data used for comparison
+**Data coverage:** The EEA recommends ≥ 75% annual coverage for a statistic to be considered valid. The distribution of coverage values was examined to understand how many records fall below this threshold.
 
-Besides the main Italy-focused dataset, we also loaded a country comparison dataset for:
+![distribution_of_data_coverage](images/distribution_of_data_coverage.png)
 
-- France
-- Switzerland
-- Austria
+**Aggregation types:** Each row represents a statistical summary, not a raw reading. Multiple aggregation types exist per station per year. 
+#%% md
+## Aggregation Process Breakdown
 
-This comparison subset was filtered to the focus pollutants and the selected aggregation process, and it was used to support cross-country comparisons later in the exploratory analysis.
+Each row does not represent a direct sensor reading. It represents a statistical summary of an entire year.
+Different rows for the same station and year represent different statistics:
+annual median, annual maximum, annual 99th percentile, and so on.
 
-This was useful because it allowed us to understand whether some observed pollution patterns were specific to Italy or also visible in nearby European countries.
+For further analysis, we consistently used the annual median (P1Y-day-per50),
+which is the 50th percentile of daily values over a full year.
 
-### Supporting outputs
 
-[images/country_comparison_counts.png](images/country_comparison_counts.png)
+![top_15_aggregation_processes.png](images/top_15_aggregation_processes.png)
 
-## 2.4 What we evaluated before the analysis
+>  **Leakage note:** Data Coverage, Verification, and Calculation Time are reporting-time metadata.
+They would not be available at prediction time, so they must never be used as model features.
+We study them here only to assess data quality.
+---
 
-Before performing any analysis, we first evaluated the quality and structure of the dataset.
+### 3.2 Pollutant Distributions
+Before comparing across time or geography, we need to understand what each pollutant looks like on its own.
+Univariate analysis answers:
 
-The first checks focused on:
+- Which pollutants are most commonly measured in the dataset?
+- What is the typical range of pollution levels across European stations?
+- Are there extreme outliers? Is the distribution skewed?
 
-- missing values
-- data coverage
-- verification flags
-- duplicate rows
-- the meaning of the aggregation process
-- the availability of spatial fields such as city and coordinates
+From here onward we work with annual median values only (aggregation code P1Y-day-per50).
+This gives us one representative number per station per year, making comparisons fair and consistent.
 
-## 2.5 Main Data Issues Identified
+We are still on raw data — no quality filters applied. What you see includes all coverage levels and verification statuses.
 
-After loading and inspecting the raw dataset, we did a series of data quality checks to evaluate whether it is relevant and reliable for analysis.
+Firstly, we look on present pollutants:
 
-The evaluation focused on common issues in environmental monitoring data, such as:
+**Focus pollutants:** NO₂, PM10, PM2.5, O₃  
+**Secondary pollutants:** SO₂, CO, C₆H₆
+![images/pollutant_counts.png](images/pollutant_counts.png)
 
-- missing values
-- duplicate observations
-- invalid pollution measurements
-- incomplete coverage of monitoring stations
 
-### Missing Values
+All four focus pollutants show **right-skewed distributions** — most stations record moderate levels, but a small number of stations are severe hotspots far above average. This skew is visible in both the histograms and the boxplot.
 
-The analysis shows that while most fields are relatively complete, some important variables suffer from significant missingness.
+![Pollutant distributions](images/pollution_level_distributions.png)
+![Overall distributions boxplot](images/overall_pollution_level_distributions.png)
 
-The City variable is missing for a large share of observations ($62\%$), which limits our ability to perform precise geographic analysis.
+Secondary pollutants (SO₂, CO, C₆H₆) also show skewed distributions and are included to enrich the interpretation of emission sources.
 
-Since understanding spatial pollution patterns is central to this project, recovering geographic information becomes a key step in the preprocessing pipeline.
+![Secondary pollutant distributions](images/secondary_pollution_level_distributions.png)
 
-### Supporting output
+**Business insight:** The gap between median and mean reveals how much extreme stations inflate the average. 
+Outliers typically represent high-traffic urban cores or industrial areas — the most important for stations regulators. 
 
-[images/missing_value_barchart.png](images/missing_value_barchart.png)
+---
 
-### Duplicate Observations
+### 3.3 Temporal Trends (2015–2024)
 
-Next, we checked whether the dataset contained duplicate rows, which could bias statistical summaries or lead to double-counting of pollution measurements. The analysis confirms that no duplicate observations were detected, indicating that the dataset structure is internally consistent.
+Three events make this decade analytically interesting: **COVID-19 lockdowns (2020)**, ongoing **EU Clean Air directives**, and the **post-COVID rebound (2021–2022)**.
 
-### Supporting output
+![Temporal trend distributions](images/temporal_trend_distributions.png)
+![Year-over-year change](images/YoY_change_in_median.png)
 
-[images/duplicate_check_result.png](images/duplicate_check_result.png)
+**Key findings:**
+- A visible drop in 2020 for traffic-related pollutants (NO₂, PM) confirms that human activity directly drives pollution.
+- A consistent downward trend from 2015 onward supports the effectiveness of EU Clean Air policies.
+- Secondary pollutants (SO₂, CO, C₆H₆) show relatively stable or gradually declining trends, 
+suggesting that industrial combustion and fuel-related emissions have improved steadily over the last decade, though at a slower pace than traffic-related pollutants
+![Secondary pollutant trends](images/YoY_secondary_pollutans_median.png)
 
-### Invalid Pollution Values
+>  **Important note:** Since there is no 2014 data, it's impossible to calculate 2015 change
+> 
+> **Connection to [Feature Engineering](#4-feature-engineering):** The COVID drop and year-over-year variation confirm that `Year` and `Season` carry real temporal signal. 
+> Monthly lag features (PM2.5_lag1/2/3) are motivated by the persistence of pollution trends observed here.
 
-Air Pollution Level is a key variable. Pollution concentrations should never take negative values. Therefore, we verified whether the dataset contained invalid measurements.
+---
 
-We recognized that a small number of negative values were present, which likely correspond to reporting errors. These observations were removed during preprocessing to ensure that all pollution measurements are physically meaningful.
+### 3.4 Geographic Patterns
 
-### Supporting output
+**Country comparison:** Pollution is not evenly distributed across Europe. Certain countries consistently show higher median levels for each pollutant.
 
-[images/negative_values_removed.png](images/negative_values_removed.png)
+![Average pollution by country](images/average_pollution_by_country.png)
 
-### Data Coverage Evaluation
+**Most polluted Italian cities:** When ranking cities by pollutant levels across all years, a small number of locations repeatedly appear as hotspots. Notably, cities in **Northern Italy** (blue bars, latitude > 43°) dominate the rankings for PM10 and PM2.5, while Southern cities appear more in O₃ rankings.
 
-Since environmental monitoring stations may not operate year-round, the dataset incorporates a Data Coverage variable. This variable indicates the percentage of time during which measurements were successfully recorded. We analyzed the distribution of this variable to determine whether the reported annual statistics are based on sufficiently complete data.
+![Most polluted cities per pollutant](images/Most%20polluted%20cities%20per%20polluntant.png)
 
-The results show that most observations have acceptable coverage, meaning that the annual pollution statistics can generally be considered reliable.
+**Station context:** Traffic stations record the highest NO₂ levels. 
+Urban areas are systematically more polluted than suburban or rural areas. This directly validates the monitoring approach and motivates the use of `Station_Type` and `Station_Area` as features.
 
-### Supporting output
+![Station context comparison](images/station_context.png)
 
-[images/distribution_of_data_coverage.png](images/distribution_of_data_coverage.png)
+**North–South gradient in Italy:** Using a composite pollution index (concentration / EU limit), Northern Italy shows higher average and median pollution levels than Southern Italy. 
+This pattern indicated the combination of industrial activity, higher urban density, and geographical conditions that restrict pollutant dispersion — most notably the **Po Valley basin**.
 
-### Aggregation Process
+![North-South composite pollution](images/north_south_composite_pollution.png)
 
-Finally, we analyzed the Data Aggregation Process variable: how the pollution value was computed, for example whether it represents:
+> **Connection to [Feature Engineering](#4-feature-engineering):** Geographic location matters. `Latitude`, `Longitude`, and the North-South gradient directly motivate including spatial coordinates as features.
 
-- an annual mean
-- a percentile value
-- a maximum daily concentration
+---
 
-Because different aggregation methods describe different aspects of pollution exposure, it is important to understand which aggregation types dominate the dataset before comparing values across observations.
+### 3.5 Features of Interest
 
-### Supporting output
+#### Altitude
 
-[images/top_15_aggregation_processes.png](images/top_15_aggregation_processes.png)
+Stations at higher altitudes benefit from stronger atmospheric mixing and wind dispersion. The correlation between PM2.5 and station altitude is **−0.315** — a moderate negative relationship. The quartile boxplot confirms this: lower-altitude stations (Q1) have higher PM2.5 concentrations.
 
-## 2.6 What We Decided to Fix or Enrich
+![PM2.5 vs station altitude](images/pm25_vs_station_altitude.png)
+![PM2.5 by altitude quartile](images/pm25_by_station_altitude_quartile.png)
 
-Based on the issues identified during the data quality evaluation, we implemented several adjustments to improve the dataset and ensure that the subsequent analysis would be meaningful.
+> **Connection to [Feature Engineering](#4-feature-engineering):** `Altitude` is included as a feature. Low-altitude areas (valleys, basins like the Po Valley) trap pollutants through temperature inversions and limited air circulation.
 
-### Recovering Missing Geographic Information (City)
+#### Green Space Ratio
 
-One of the most significant data issues identified during the quality assessment was the large share of missing values in the City variable, which was missing for approximately $62\%$ of observations. Since geographic analysis is central to understanding pollution patterns, recovering city-level information became a critical preprocessing step.
+The green space ratio (computed from CORINE Land Cover 2018) represents the share of agricultural and forest land in a monitoring station's municipality. The correlation between green ratio and PM2.5 is **negative** — greener comuni tend to have lower PM2.5 concentrations.
 
-To handle this issue, using spatial data from ISTAT municipalities, we were able to assign many stations to specific cities.
+![Population density and green space](images/population%20density%20and%20human%20activity.png)
 
-Using GeoPandas, we performed a spatial join between station coordinates and the ISTAT comuni shapefile, assigning each monitoring station to the municipality in which it is located. This allowed us to reconstruct missing city values for many stations and significantly improved the spatial interpretability of the dataset.
+> **Connection to [Feature Engineering](#4-feature-engineering):** `Green_Ratio` is included as a continuous 0–1 feature. It carries more predictive signal than raw CLC class categories (76% of stations sit on artificial surfaces).
 
-### Supporting outputs
+#### Population Density
 
-[images/joined_comune.csv](images/joined_comune.csv)
+The year-over-year drop in 2020 (COVID) directly shows that changes in human concentration and urban activity influence PM2.5. 
+Cities with higher population density consistently show increased pollution. Population density was computed from UN (primary) and ISTAT (fallback) data combined with ISTAT comuni area (km²).
 
-[images/city_recovery_before_after.png](images/city_recovery_before_after.png)
+> **Connection to [Feature Engineering](#4-feature-engineering):** `Population_Density` is included as a proxy for human activity intensity.
 
-### Cleaning Invalid Pollution Values
+---
 
-During the inspection of the Air Pollution Level variable, we found a small number of negative values, which are not physically meaningful for pollution concentrations. These values likely correspond to measurement or reporting errors. To ensure that all observations represent valid environmental measurements, negative pollution values were removed during preprocessing.
+### 3.6 Correlation Structure
 
-### Supporting outputs
+Pollutant co-occurrence patterns reveal shared emission sources. NO₂, PM10, and PM2.5 tend to co-occur at the same stations (combustion engines, industry), while O₃ shows negative correlation with combustion pollutants due to its secondary atmospheric formation.
 
-[images/negative_values_removed.png](images/negative_values_removed.png)
+![Correlation matrix](images/correlation_matrix.png)
+![Extended correlation matrix](images/extended_correlation_matrix.png)
+![Pollutant pairs scatterplot](images/pairs_pollutants_scatterplot.png)
 
-### Evaluating Measurement Coverage
+**Business insight:** If NO₂ and PM are strongly correlated, targeting one source (e.g. reducing car traffic) tends to improve multiple pollutants simultaneously.
 
-The Data Coverage variable represents the percentage of time during which measurements were recorded. We examined the distribution of this variable to determine whether annual pollution statistics are based on sufficiently complete measurements. The results show that most observations have acceptable coverage, meaning that the reported pollution statistics can generally be considered reliable.
+### Dynamic city-level maps
 
-### Supporting outputs
+To better understand spatial and temporal pollution dynamics, we aggregate station-level measurements to the city–year level. For each city and year, pollutant concentrations are computed as the median across available monitoring stations.
+This aggregated dataset is then enriched with external population data (UN + EEA fallback), allowing us to visualise how pollution patterns evolve across Italian cities over time.
 
-[images/data_coverage_distribution.png](images/data_coverage_distribution.png)
+#### Map 1: Limit‑weighted pollution index (city/year, 2015–2024)
 
-### Motivation for Additional Contextual Variables
+Colour = mean over pollutants of (concentration / EU limit). Values > 1 mean the city–year exceeds at least one limit on average. 
+Circle size = population. Interactive: use the slider to change year.
 
-Although the dataset provides detailed pollution measurements, it contains very limited contextual information about the environment surrounding monitoring stations.
+### Map 2: EEA Air Quality Index (city level)
 
-In particular, important factors that may influence pollution levels --- geographic characteristics, meteorological conditions, and population distribution --- are either missing or static in the provided data.
+Colour = EEA 2024 AQI band (1–6: Good → Extremely poor). Use the year slider to compare years.
 
-For example, the population information included in the dataset does not vary across years, which limits its usefulness for analyzing demographic effects over time.
+### Map 3: WHO vs EU limit exceedance (comune level)
 
-Because of these limitations, the dataset in its current form may not fully explain why pollution levels differ between locations. Therefore, the next step of the project is to investigate whether external contextual variables could help explain the observed spatial differences in pollution levels.
+- **Below WHO** — meets WHO guidelines.
+- **Exceeds WHO only** — above WHO but within EU limits.
+- **Exceeds EU limit** — above EU limit.
 
-### Population Data Limitation
+Use the year slider to explore 2015–2024.
 
-Another limitation identified during the data exploration concerns population information.
 
-The population data provided in the dataset appears constant across all years, which prevents us from analyzing changes in population over time.
+---
 
-Because of this limitation, we plan to integrate an updated population dataset from ISTAT in the next stage of the project, which will allow us to build dynamic demographic information into future modeling. This additional dataset will enable us to better capture the relationship between population distribution and pollution exposure.
+## 4. Feature Engineering
 
-Therefore, the key question becomes whether contextual environmental variables can explain the spatial differences observed in pollution levels.
+> **`features.ipynb`** — Builds the complete feature matrix for model training. Runs end-to-end with no intermediate files required.  
+> **Output:** `df_model.csv` (annual) and `df_model_monthly.csv` (monthly with lags and weather).
 
-# 3. Initial Analytical Assumption
+### 4.1 Annual Feature Matrix (`df_model.csv`)
 
-EDA Section 4 from notebook.
+The annual matrix aggregates EEA station-year records into one row per `(station × year)` for Italian PM2.5 stations. Features are assembled from EDA findings:
 
-Pollutant distribution includes:
+| Feature | Source | EDA Motivation |
+|---|---|---|
+| `PM2_5` | EEA annual median | **Target variable** |
+| `NO2`, `PM10`, `O3` | EEA annual median | Co-pollutant correlations |
+| `Altitude` | Station metadata | Negative correlation with PM2.5 (−0.315) |
+| `Latitude`, `Longitude` | Station metadata | North–South gradient; spatial hotspots |
+| `Station_Type`, `Station_Area` | Station metadata | Urban > suburban > rural pollution pattern |
+| `Green_Ratio` | CORINE Land Cover 2018 | Greener areas → lower PM2.5 |
+| `Population_Density` | UN/ISTAT + comuni area | Human activity proxy; COVID drop evidence |
 
-- pollutant frequency
-- pollutant value distributions
-- skewness
-- outliers
+**Green Ratio computation:** For each station, the CORINE Land Cover GDB was spatially joined to ISTAT comuni. Green ratio = (agricultural area + forest area) / total comune area.
 
-The key question is: what is in the dataset, and which pollutant should we study?
+![Feature correlation heatmap](images/df_model_feature_correlation.png)
 
-After cleaning and preparing the dataset, the next step is to understand what insights can already be obtained from the available pollution measurements, before introducing additional contextual variables.
+### 4.2 Monthly Enrichment via OpenAQ
 
-**Initial analytical assumption**
+Annual averages mask the seasonal dynamics that drive PM2.5 risk. Monthly resolution reveals patterns like **winter temperature inversions in the Po Valley**, spring agricultural burning, or summer ozone formation.
 
-Pollution patterns observed in the dataset may potentially be explained using only the variables already present in the air quality monitoring data.
+Three-step process:
+1. **Station coverage check** — match each EEA station to the nearest OpenAQ location within 1 km (cached in `openaq/openaq_coverage.csv`).
+2. **Sensor discovery** — retrieve sensor IDs for PM2.5, PM10, NO₂, and O₃ per matched location (cached in `openaq/openaq_sensors.csv`).
+3. **Monthly data pull** — fetch monthly aggregated measurements for 2020–2024 via `/v3/sensors/{id}/days/monthly` (cached in `openaq/openaq_monthly_raw.csv`).
 
-To evaluate this assumption, we first explore the structure of the pollution measurements themselves, focusing on three aspects:
+Coverage was restricted to 2020+ because only 20 PM2.5 sensors were available before 2020, against 145 from 2020 onward. Using pre-2020 annual EEA values as fill would flatten seasonal variation and introduce **data leakage** (annual EEA median computed from the full calendar year, including future test months).
 
-- which pollutants dominate the dataset
-- how pollution values are distributed
-- whether meaningful patterns appear across pollutants, time, and geography
+### 4.3 Weather Features (Open-Meteo)
 
-This initial exploration helps us determine whether the existing dataset is sufficient to explain pollution patterns or whether additional environmental variables may be necessary.
+Physical drivers of PM2.5 that season alone cannot capture:
 
-## 3.1 Distribution of Pollutants in the Dataset
+- **Temperature** — winter inversions trap pollution close to the ground
+- **Wind speed** — low wind = less dispersion = higher PM2.5
+- **Precipitation** — rain washes out particulate matter
 
-Which pollutants are most frequently reported in the dataset? The results show that although the dataset contains many pollutant types, the majority of observations are concentrated in a smaller group of pollutants.
+Monthly averages were fetched from Open-Meteo's archive API (free, no key required). Stations within 55 km share the same 0.5° grid cell, reducing 144 API calls to ~62 without meaningful loss of resolution.
 
-### Supporting output
+### 4.4 Lag Features
 
-[images/pollutant_counts.png](images/pollutant_counts.png)
+PM2.5 is a temporally persistent process — today's air quality is heavily influenced by previous days' accumulation.
 
-This distribution indicates that a few pollutants dominate the monitoring data, particularly:
+```python
+# PM2.5 history
+PM2_5_lag1, PM2_5_lag2, PM2_5_lag3      # previous 1–3 months
+PM2_5_roll3_mean, PM2_5_roll3_std        # 3-month rolling mean and std
 
-- PM2.5
-- PM10
-- NO$_2$
-- O$_3$
+# Lagged co-pollutants
+PM10_lag1, NO2_lag1, O3_lag1
 
-These pollutants appear consistently across years and monitoring stations, making them the most suitable candidates for further analysis.
+# Lagged weather
+Temp_Mean_lag1, Wind_Speed_lag1, Precipitation_lag1
+```
 
-## 3.2 Distribution of Pollution Levels
+Seasonal encoding uses **sin/cos** of month index so December is numerically adjacent to January, which helps linear models and Ridge learn smooth seasonality.
 
-Next, we analyzed the distribution of pollution concentrations for the main pollutants.
+### 4.5 Final Monthly Feature Matrix (`df_model_monthly.csv`)
 
-### Supporting outputs
+| Column group | Features |
+|---|---|
+| Identifiers | `eoi_code`, `date`, `Year`, `Month`, `Season` |
+| Target | `PM2_5` |
+| Co-pollutants | `PM10`, `NO2`, `O3` |
+| PM2.5 history | `PM2_5_lag1/2/3`, `PM2_5_roll3_mean`, `PM2_5_roll3_std` |
+| Co-pollutant lags | `PM10_lag1`, `NO2_lag1`, `O3_lag1` |
+| Weather (current) | `Temp_Mean`, `Wind_Speed`, `Precipitation` |
+| Weather (lagged) | `Temp_Mean_lag1`, `Wind_Speed_lag1`, `Precipitation_lag1` |
+| Spatial | `Altitude`, `Latitude`, `Longitude` |
+| Station context | `Station_Type`, `Station_Area` |
+| Urban/environmental | `Green_Ratio`, `Population_Density` |
+| Cyclical time | `month_sin`, `month_cos` |
 
-[images/pollution_level_distributions.png](images/pollution_level_distributions.png)
+---
 
-[images/overall_pollution_level_distributions.png](images/overall_pollution_level_distributions.png)
+## 5. Modeling
 
-The histograms show that pollution levels are strongly right-skewed, meaning that most monitoring stations report moderate pollution levels while a smaller number of locations experience very high concentrations.
+> **`model.ipynb`** — Three models evaluated under two split strategies. Primary outputs saved to `model_output/`.
 
-The boxplots further confirm the presence of extreme pollution values, suggesting that pollution exposure may be concentrated in specific areas.
+### Architecture Overview
 
-This observation provides an important initial insight:
+| Model | Algorithm | Feature Set | Goal |
+|---|---|---|---|
+| **A** | Random Forest + XGBoost | Environmental, spatial, contextual (no lags) | Policy simulation: what can municipalities act on? |
+| **B** | Random Forest | All features + PM2.5 lags, rolling stats, lagged pollutants, weather | Accuracy benchmark |
+| **C** | Ridge Regression | Same as Model A | Linear baseline with signed coefficients |
 
-Pollution levels are not evenly distributed across monitoring stations, which suggests that local environmental conditions may influence pollution concentrations.
+**Two evaluation splits:**
+- **Time split:** train on earlier months (80%), test on later months (20%) — simulates real forecasting.
+- **Spatial split:** train on some stations, test on completely unseen stations (`GroupShuffleSplit`, 20% test) — simulates deployment to new locations.
 
-## 3.3 Selecting the Focus Pollutant
+---
 
-Since the dataset contains several pollutants, it is necessary to understand which pollutant should become the main focus of the analysis.
+### Model A — Environmental & Spatial (RF + XGBoost)
 
-Among the available pollutants, PM2.5 emerges as the most relevant candidate for several reasons:
+Model A uses only non-pollutant features: seasonality, weather, geographic coordinates, green ratio, population density, and station metadata. This allows interpreting structural environmental drivers of PM2.5 without relying on pollutant inputs that may not be available at prediction time.
 
-First, PM2.5 is widely recognized as one of the most harmful air pollutants, due to its ability to penetrate deeply into the respiratory system and bloodstream.
+Two algorithms are trained on both splits; the **champion is selected by lowest average RMSE across both splits**. The winner is then retrained on the full dataset for SHAP analysis.
 
-Second, PM2.5 appears frequently in the monitoring dataset, ensuring sufficient observations for reliable analysis.
+![Model A RMSE/MAE comparison](images/modela_matrix_comparison.png)
 
-Third, PM2.5 is commonly used as a key indicator of air quality in environmental and public health research, making it particularly relevant for policy analysis.
+**Residuals (spatial split):**
 
-For these reasons, PM2.5 was selected as the primary pollutant of interest for the subsequent exploratory analysis.
+![Model A spatial residuals](images/modela_residuals_space_rf_xgb.png)
 
-This choice is also supported by a chemical and health perspective on pollutant danger:
+**SHAP Analysis — what drives PM2.5 in Model A?**
 
-> From a chemical/health perspective, ``most dangerous'' is based on toxicity, exposure, and regulatory limits (WHO/EU). A common ranking is  
-> $\mathbf{PM2.5} > \mathbf{PM10} > \mathbf{NO_2} > \mathbf{O_3} > \mathbf{SO_2}$.
+SHAP assigns a contribution value to every feature for each prediction. Pink = higher-than-average feature value; blue = lower-than-average.
 
-Here:
+![Model A SHAP beeswarm](images/modela_XGBoost_shap_beeswarm.png)
+![Model A SHAP importance bar](images/modela_XGBoost_shap_importance_bar.png)
 
-- $\mathrm{PM2.5}$ = fine particles, deep lung penetration, strong link to mortality
-- $\mathrm{PM10}$ = coarse fraction, still harmful
-- $\mathrm{NO_2}$ = respiratory irritant, traffic-related
-- $\mathrm{O_3}$ = oxidant, health effects at high levels
-- $\mathrm{SO_2}$ = irritant, often lower in modern cities
+Top drivers identified: `Month` (seasonality), `Latitude`, `Longitude`, `Altitude`, `Temp_Mean`, `Wind_Speed` — confirming the EDA findings that geography and climate are the primary structural determinants of PM2.5.
 
-Relative to EU/WHO annual limits, exceedances are often most frequent for PM2.5 or NO$_2$ in urban traffic sites.
+---
 
-The next step is to explore how PM2.5 concentrations vary across time and geographic locations.
+### Model B — Full Predictive RF (With Lags)
 
-For the presentation, include only:
+Model B adds PM2.5 lags, rolling statistics, and lagged co-pollutants on top of all Model A features. Comparing A vs B directly measures **how much pollution memory and co-pollutant history improve forecasting**.
 
-- [images/pollutant_counts.csv](images/pollutant_counts.csv)
-- one boxplot or histogram
+![Model B RMSE/MAE](images/modelb_metrics.png)
 
-# 4. Key Discoveries from EDA
+**Residuals:**
 
-Combine sections 4, 5, and 6 into three discoveries.
+![Model B time residuals](images/modelb_residuals_time.png)
+![Model B spatial residuals](images/modelb_residuals_space.png)
 
-After identifying PM2.5 as the focus pollutant, we explored how pollution behaves across monitoring stations, time, and geographic locations.
+**SHAP Analysis — Model B:**
 
-The exploratory analysis reveals three key insights.
+With lags available, `PM2_5_lag1` and `PM2_5_roll3_mean` dominate the SHAP rankings — confirming that PM2.5 is strongly temporally persistent.
 
-## Discovery 1 --- Pollution levels are highly uneven across monitoring stations
+![Model B SHAP beeswarm](images/modelb_shap_beeswarm.png)
+![Model B SHAP top 15](images/modelb_shap_top15.png)
 
-Next, we analyzed the distribution of pollution levels across observations.
+---
 
-### Supporting outputs
+### Model C — Ridge Regression (Linear Baseline)
 
-[images/pollution_level_distributions.png](images/pollution_level_distributions.png)
+Ridge uses the same feature set as Model A. It provides interpretable signed coefficients and a linear performance baseline for comparison.
 
-[images/overall_pollution_level_distributions.png](images/overall_pollution_level_distributions.png)
+**Performance (Ridge):**
+- Time split: MAE ≈ 5.21, RMSE ≈ 10.00, R² ≈ 0.35
+- Spatial split: MAE ≈ 4.92, RMSE ≈ 6.84, R² ≈ 0.32
 
-[images/secondary_pollution_level_distributions.png](images/secondary_pollution_level_distributions.png)
+**Coefficient analysis:** Positive coefficients increase predicted PM2.5; negative coefficients decrease it. City indicators have the strongest impact, suggesting location dominates. Temperature carries a negative coefficient — higher temperatures are associated with lower PM2.5 (consistent with SHAP findings in Model A).
 
-The distributions show that pollution values are strongly right-skewed. Most stations report moderate pollution levels, while a smaller number experience very high concentrations. These extreme values suggest that pollution exposure is not evenly distributed, and that certain areas may consistently experience worse air quality.
+![Model C coefficients](images/modelc_coefficients.png)
 
-## Discovery 2 --- Pollution patterns change over time
+---
 
-Next, we analyzed temporal changes in pollution levels between 2015 and 2024.
+### Comparison: Model A vs Model C
 
-### Supporting outputs
+The non-linear model (A) substantially outperforms the linear baseline (C), particularly in the time split. This is mathematical proof that PM2.5 is driven by **non-linear dynamics** that Ridge cannot capture.
 
-[images/temporal_trend_distributions.png](images/temporal_trend_distributions.png)
+| | Model A (RF) | Model C (Ridge) |
+|---|---|---|
+| R² (Time) | **0.29** | 0.10 |
+| R² (Spatial) | **0.47** | 0.28 |
+| Residuals | Tightly centred | Wider spread, underestimates peaks |
+| Top drivers | Month, Lat, Lon, Altitude | Suburban Area, Month, Altitude, Wind |
 
-[images/YoY_change_in_median.png](images/YoY_change_in_median.png)
+![Model A vs C metric comparison](images/modela_modelc_metrics_comparison.png)
+![Model A vs C time residuals](images/modela_modelc_residuals_time.png)
+![Model A vs C spatial residuals](images/modela_modelc_residuals_spatial.png)
+![Model A vs C shared features](images/modela_modelc_feature_effect_comparison.png)
 
-[images/YoY_secondary_pollutans_median.png](images/YoY_secondary_pollutans_median.png)
+---
 
-The analysis reveals noticeable year-to-year fluctuations in pollution levels. A particularly visible change occurs around 2020, when pollution levels decrease across several pollutants. This likely reflects the impact of COVID-19 lockdowns, which temporarily reduced traffic and industrial emissions. In subsequent years, pollution levels begin to increase again, suggesting that the drop was temporary rather than structural.
+### Overall Model Performance
 
-Pollution levels are dynamic and influenced by external events, indicating that environmental and socio-economic factors can significantly affect air quality.
+| Model | Split | RMSE | MAE | R² |
+|---|---|---|---|---|
+| **Model A** (RF – No Lags) | Time | 10.47 | 4.38 | 0.289 |
+| **Model B** (RF – With Lags) | Time | 10.46 | 4.31 | 0.290 |
+| **Model C** (Ridge) | Time | 11.77 | 6.04 | 0.101 |
+| **Model A** (RF – No Lags) | Spatial | 6.00 | 3.86 | 0.474 |
+| **Model B** (RF – With Lags) | Spatial | **4.75** | **2.90** | **0.671** |
+| **Model C** (Ridge) | Spatial | 7.02 | 4.90 | 0.282 |
 
-## Discovery 3 --- Pollution varies strongly across locations
+---
 
-To understand spatial variation in pollution levels, we compared pollution concentrations across countries, cities, and monitoring station contexts.
+## 6. Conclusion & Business Insights
 
-### Supporting outputs
+### Final Model Recommendation
 
-[images/average_pollution_by_country.png](images/average_pollution_by_country.png)
+**Model B is the most robust predictor**, achieving a massive leap in the spatial split (R² = 0.671 vs. 0.474 for Model A). This confirms that PM2.5 is a process of **temporal persistence** — today's air quality is heavily anchored to the accumulation of previous months.
 
-[images/most_polluted_cities.png](images/most_polluted_cities.png)
+**We recommend a dual-model deployment strategy:**
 
-[images/station_context.png](images/station_context.png)
+1. **Model B — Operational Forecasting:** Superior generalization to unseen stations makes it the most reliable tool for real-time monitoring. Predict next month's PM2.5 levels at any Italian station with high accuracy.
 
-[images/secondary_by_station.png](images/secondary_by_station.png)
+2. **Model A — Urban Planning & Policy Simulation:** Because it does not rely on previous pollution levels (which a city cannot change), Model A isolates and simulates how changing actionable variables — green ratio, land use, urban density — would directly impact air quality. This is the right tool for "what-if" scenario planning.
 
-### Cross-country comparison
+---
 
-The first figure compares the median pollution levels by country for the main pollutants.
+### Key Business Insights
 
-**Key observations:**
+**1. The Po Valley Problem is Geographic, Not Just Industrial**
+The North–South pollution gradient is strongly mediated by topography. The Po Valley basin, enclosed by Alpine and Apennine mountain ranges, restricts atmospheric circulation and allows pollutants to accumulate. PM2.5 levels at low-altitude stations are systematically higher regardless of emissions. Policy interventions that ignore terrain will underestimate exposure risk in low-lying areas.
 
-- Italy consistently shows the highest median values among the compared countries (Italy, Switzerland, Austria, France) for NO$_2$, PM10, and PM2.5.
-- Switzerland generally exhibits lower median concentrations for particulate matter pollutants.
-- O$_3$ levels are relatively similar across countries, with smaller differences compared to other pollutants.
+**2. Human Activity is a Direct Pollution Switch**
+The COVID-19 lockdown produced a measurable, sharp drop in PM2.5 and NO₂ in 2020. This is direct evidence that traffic and industrial activity are the main emission drivers — and that pollution responds rapidly to behavioral change. Urban mobility policies (e.g. low-emission zones, electric vehicle incentives) can deliver measurable air quality improvements within months.
 
-This suggests that pollution levels may depend on national environmental conditions, urban density, and emission sources, motivating a deeper focus on Italy, where pollution levels appear relatively higher.
+**3. Green Space is a Quantifiable Pollution Reducer**
+The negative correlation between green ratio and PM2.5 (confirmed both in EDA and by SHAP analysis) means urban greening is not merely aesthetic. Adding 10 percentage points of green cover to a city's land use could contribute to a measurable reduction in PM2.5. This supports investment in parks, urban forests, and agricultural buffers around dense residential areas.
 
-### City-level pollution hotspots
+**4. Population Density Amplifies Exposure**
+Denser cities experience higher PM2.5, and that pollution affects more people per square kilometer. Identifying the highest-density, highest-pollution municipalities in the Po Valley allows public health authorities to prioritize air quality interventions and healthcare resource planning where the disease burden is greatest.
 
-The second figure shows the top 15 most polluted cities per pollutant.
+**5. Seasonal Dynamics Are Non-Negotiable for Planning**
+Annual averages mask the critical winter peaks driven by temperature inversions and heating. Monthly forecasting (Model B) gives municipalities advance warning of high-risk months, enabling preemptive measures such as traffic restrictions or industrial emission caps before winter smog events occur.
 
-**Key observations:**
+**6. The Framework Is Exportable**
+While this analysis focuses on Italy, the same pipeline — EEA data + CORINE land cover + OpenAQ monthly + Open-Meteo weather — is replicable for any European country. Similar geographic risk zones exist in southern Poland (Silesian basin), northern France (industrial corridor), and the Ruhr Valley in Germany. A scalable version of Model B could be deployed Europe-wide to support the EU's Zero Pollution Action Plan.
 
-- Many of the highest pollution values occur in smaller municipalities rather than only large metropolitan areas.
-- Cities such as Soresina, Revello, and Dalmine appear among the highest for PM2.5.
-- For NO$_2$, larger urban areas such as Milano and Torino also appear among the most polluted locations.
+---
 
-Pollution hotspots are not limited to major cities and may depend on local industrial activity, geography, or traffic conditions.
+### Stakeholders
 
-### Station context: type and area
+This analysis is directly relevant to:
+- **Public health authorities** — identifying high-risk populations and informing healthcare demand forecasting
+- **Environmental protection agencies** — evidence-based regulatory targeting of high-pollution zones
+- **Urban planners** — quantified ROI on green infrastructure, land use zoning, and traffic policy
+- **Municipal governments** — monthly early-warning tools for smog season preparation
 
-The third and fourth figures compare pollution levels across monitoring station types and areas.
+---
 
-**Key observations:**
-
-**Station type**
-
-- Traffic stations record the highest median pollution levels for NO$_2$, PM10, and PM2.5.
-- Background stations show lower concentrations, representing general ambient conditions.
-- Industrial stations show intermediate values.
-
-This is expected because traffic stations are typically placed near major roads or high-emission areas.
-
-**Station area**
-
-Comparing rural, suburban, and urban areas:
-
-- Urban stations tend to show higher NO$_2$ and PM concentrations, reflecting higher traffic density and urban emissions.
-- Rural areas generally exhibit lower concentrations for most pollutants.
-- O$_3$ shows the opposite pattern, with higher values in rural areas, which is consistent with known atmospheric chemistry effects.
-
-### Secondary pollutants
-
-The secondary pollutant comparison confirms similar spatial patterns:
-
-- Higher concentrations of pollutants such as SO$_2$ and CO are associated with traffic or industrial station types.
-- Urban areas tend to show higher concentrations compared to rural areas.
-
-## Health-Weighted Pollution Exposure (ALISA'S HEATMAP)
-
-While the previous analysis focuses on pollution concentrations themselves, an important question for policymakers is how these pollution patterns translate into potential health impacts.
-
-To better illustrate this dimension, we constructed a Health-Weighted Pollution Index map, which combines pollutant concentrations with their relative health impact.
-
-### Supporting output
-
-[images/health_weighted_pollution_index_map.png](images/health_weighted_pollution_index_map.png)
-
-This map highlights regions where pollution exposure may pose greater risks to human health, rather than simply showing areas with high pollutant concentrations.
-
-In particular, the map reveals that several areas with elevated PM2.5 levels correspond to regions where population exposure may be especially concerning, reinforcing the relevance of focusing on PM2.5 in the subsequent modeling stage.
-
-This visualization moves the analysis from pollution concentrations to potential human impact, which is why PM2.5 becomes the key pollutant for predictive modeling.
-
-## Key Conclusion from the EDA
-
-The exploratory analysis reveals several important patterns in the air quality dataset.
-
-First, pollution levels are highly uneven across monitoring stations. While most locations exhibit moderate pollution levels, a smaller number of stations experience significantly higher concentrations. This indicates that pollution exposure is spatially concentrated rather than uniformly distributed.
-
-Second, pollution levels vary over time. The temporal analysis shows noticeable fluctuations between years, including a temporary decrease around 2020 that likely reflects the impact of reduced mobility during COVID-19 lockdowns.
-
-Third, pollution levels vary systematically across geographic contexts. Differences appear between countries, cities, monitoring station types, and urban versus rural areas. Traffic monitoring stations and urban environments generally show higher concentrations of pollutants such as NO$_2$ and PM2.5.
-
-Finally, the Health-Weighted Pollution Index highlights areas where pollution exposure may have greater implications for human health, reinforcing the importance of focusing on PM2.5 as the primary pollutant in the subsequent analysis.
-
-Taken together, these findings suggest that pollution patterns are influenced by a combination of environmental conditions, urban characteristics, and human activity. This motivates the next stage of the project, which introduces contextual environmental variables that may help explain these patterns and support predictive modeling.
-
-# 5. Predictive Opportunities and What Drives Them
-
-These variables are introduced to test whether environmental context can explain the spatial pollution differences identified in the exploratory analysis.
-
-Our contextual variables provide a broader description of the environmental conditions that may influence pollution accumulation and dispersion. Understanding these relationships is essential for developing models capable of predicting pollution levels and assessing their potential societal impact.
-
-## 5.1 Relationships Between Pollutants
-
-Before introducing environmental drivers, we first explored relationships between pollutants already present in the dataset.
-
-### Supporting outputs
-
-[images/correlation_matrix.png](images/correlation_matrix.png)
-
-[images/extended_correlation_matrix.png](images/extended_correlation_matrix.png)
-
-[images/pairs_pollutants_scatterplot.png](images/pairs_pollutants_scatterplot.png)
-
-The correlation matrices reveal several important relationships.
-
-Pollutants such as PM2.5 and PM10 show strong positive correlations, indicating that they often originate from similar emission sources such as traffic and industrial activity.
-
-Nitrogen dioxide (NO$_2$), which is closely linked to vehicle emissions, also exhibits positive correlations with particulate matter.
-
-These relationships suggest that multiple pollutants may share common emission drivers, reinforcing the importance of understanding environmental and urban factors that influence pollution generation and dispersion.
-
-## 5.2 Elevation and Pollution
-
-One environmental factor that may influence pollution levels is elevation.
-
-### Supporting outputs
-
-[images/pm25_vs_elevation_regression.png](images/pm25_vs_elevation_regression.png)
-
-[images/pm25_by_elevation_quartile.png](images/pm25_by_elevation_quartile.png)
-
-The analysis shows a weak negative relationship between PM2.5 levels and elevation. Locations situated at higher altitudes tend to experience slightly lower PM2.5 concentrations, which may be explained by atmospheric dynamics.
-
-The quartile analysis further confirms that lower elevation areas tend to exhibit higher PM2.5 concentrations on average.
-
-## 5.3 Population Density and Urban Activity
-
-Another important factor influencing pollution levels is population density, which serves as a proxy for urban activity.
-
-Areas with higher population density typically experience:
-
-- greater traffic intensity
-- increased economic activity
-- higher energy consumption
-
-These factors can lead to higher emissions of pollutants such as NO$_2$ and particulate matter.
-
-As discussed earlier in Section 2.6, the population information included in the original dataset remains constant across years. Therefore, we integrate updated population data from ISTAT, allowing future models to better capture the relationship between population distribution and pollution exposure.
-
-## 5.4 Green Space and Pollution Mitigation
-
-Urban green spaces may also influence air quality by helping to:
-
-- absorb certain pollutants
-- improve local air circulation
-- mitigate urban heat effects
-
-Cities with higher proportions of green space may therefore experience lower pollution concentrations compared to densely built urban environments. To explore this effect, we plan to incorporate green space ratios into the dataset, which will allow us to analyze how urban planning characteristics relate to pollution levels.
-
-## 5.5 Potential Predictive Applications
-
-Based on the exploratory analysis, three potential directions emerge.
-
-### 1. Pollution forecasting
-
-Using environmental and urban variables, it becomes possible to develop models that predict PM2.5 levels across locations and time. Such models could help identify future pollution hotspots and support environmental monitoring.
-
-### 2. Public health risk prediction
-
-PM2.5 is strongly associated with respiratory and cardiovascular diseases. Combining pollution predictions with demographic information (such as population density and age distribution) could help estimate:
-
-- respiratory disease risk
-- hospital admission surges
-- healthcare demand
-
-### 3. Urban planning and environmental policy support
-
-Environmental variables such as green space availability, elevation, and population density can help identify urban areas that are more vulnerable to pollution accumulation.
-
-Such insights can support:
-
-- urban planning decisions
-- pollution mitigation strategies
-- environmental policy development
-
-## Conclusion
-
-Taken together, the analysis suggests that environmental context plays a significant role in shaping pollution patterns.
-
-By combining pollution measurements with contextual variables such as elevation, population density, and green space availability, it becomes possible to move from descriptive analysis toward predictive modeling.
-
-The next section therefore focuses on how these variables can be integrated into a modeling framework for predicting PM2.5 levels and their potential impacts.
-
-# 6. Future Modeling Direction and Potential Impact
-
-The exploratory analysis and environmental enrichment steps provide a foundation for developing predictive models of PM2.5 pollution levels. By combining pollution measurements with contextual variables, the project can move from descriptive analysis toward predictive and decision-support models. Several modeling approaches could be implemented.
-
-## 6.1 PM2.5 Prediction Model
-
-The first step is to build a model capable of predicting PM2.5 concentrations across locations and time.
-
-Potential input variables include:
-
-- other pollutant levels (PM10, NO$_2$, O$_3$)
-- elevation
-- population density
-- urban characteristics such as green space ratios
-- monitoring station context (traffic, background, industrial)
-
-Possible modeling approaches:
-
-- linear regression models
-- tree-based models (Random Forest, Gradient Boosting)
-- spatial regression methods
-
-### Potential outputs
-
-Such a model could produce:
-
-- predicted PM2.5 levels for different cities
-- identification of high-risk pollution hotspots
-- estimated contribution of different environmental drivers
-
-## 6.2 Health Risk Forecasting
-
-PM2.5 pollution is strongly linked to respiratory and cardiovascular diseases. By combining PM2.5 predictions with demographic information, the model could be extended to estimate potential health impacts of pollution exposure.
-
-Possible outputs include:
-
-- predicted respiratory disease risk
-- expected hospital admission surges
-- estimated public health burden associated with pollution
-
-These insights could help public health authorities anticipate healthcare demand and design targeted interventions.
-
-## 6.3 Urban Policy and Environmental Planning
-
-The modeling framework could also support policy and urban planning decisions. By analyzing how variables such as population density, green space availability, and elevation influence pollution levels, the model could identify:
-
-- urban areas that are more vulnerable to pollution accumulation
-- locations where increasing green spaces may reduce pollution exposure
-- regions where emission reduction policies may have the greatest impact
-
-### Potential impact
-
-These insights could support:
-
-- urban planning strategies
-- environmental regulation
-- air quality monitoring programs
-
-By identifying the key drivers of PM2.5 pollution and forecasting pollution levels, the project can support data-driven decision making for policymakers, healthcare systems, and environmental agencies.
+*Project developed for the Accenture Data Science Challenge. Data source: European Environment Agency (EEA) Annual Air Quality Statistics 2015–2024.*
