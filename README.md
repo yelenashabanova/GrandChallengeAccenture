@@ -163,7 +163,7 @@ Before comparing across time or geography, we need to understand what each pollu
 Univariate analysis answers:
 
 - Which pollutants are most commonly measured in the dataset?
-- What is the typical range of pollution levels across European stations?
+- What is the typical range of pollution levels across Italian stations?
 - Are there extreme outliers? Is the distribution skewed?
 
 From here onward we work with annual median values only (aggregation code P1Y-day-per50).
@@ -281,23 +281,17 @@ Pollutant co-occurrence patterns reveal shared emission sources. NO₂, PM10, an
 
 **Business insight:** If NO₂ and PM are strongly correlated, targeting one source (e.g. reducing car traffic) tends to improve multiple pollutants simultaneously.
 
-### Dynamic city-level maps
+### [Dynamic city-level maps](eda.ipynb#dynamic-city-level-maps)
 
 To better understand spatial and temporal pollution dynamics, we aggregate station-level measurements to the city–year level. For each city and year, pollutant concentrations are computed as the median across available monitoring stations.
 This aggregated dataset is then enriched with external population data (UN + EEA fallback), allowing us to visualise how pollution patterns evolve across Italian cities over time.
 
-#### Map 1: Limit‑weighted pollution index (city/year, 2015–2024)
-
-Colour = mean over pollutants of (concentration / EU limit). Values > 1 mean the city–year exceeds at least one limit on average. 
-Circle size = population. Interactive: use the slider to change year.
-
-![map_limit_index.png](images/map_limit_index.png)
-### Map 2: EEA Air Quality Index (city level)
-
-Colour = EEA 2024 AQI band (1–6: Good → Extremely poor). Use the year slider to compare years.
-![images/map_aqi.png](images/map_aqi.png)
 ### Map 3: WHO vs EU limit exceedance (comune level)
+This map compares **annual median PM2.5** (aggregated from EEA stations spatially linked to each comune) to the **WHO annual guideline of 5 µg/m³**. Colours are **multiplicative exceedance factors**, not the EEA AQI and not EU legal limits: a value of **2×** means concentrations are roughly twice the WHO benchmark.
 
+**Pattern:** The **Po Valley** (red outline) stands out as the largest continuous area of **high factors** (often **2–3×** and pockets of **3–4×** or **4×+**), consistent with winter stagnation, industry, and dense traffic. **Central Italy** (blue circle) shows a secondary cluster of elevated factors relative to much of the peninsula. **Campania / Naples** (orange circle) repeats a well-known Southern hotspot where local emissions and basin topography lift PM2.5. **White / light** comuni are at or below the WHO guideline among those with data; **grey** comuni had **no PM2.5 record in 2024** in this pipeline, so they should not be read as “clean” — only as **unmonitored** in the merged station–comune layer.
+
+**Caveat:** Values reflect **where monitors exist** and how stations map to comuni; sparse coverage can leave large areas grey and may over-represent urbanised comuni with stations.
 - **Below WHO** — meets WHO guidelines.
 - **Exceeds WHO only** — above WHO but within EU limits.
 - **Exceeds EU limit** — above EU limit.
