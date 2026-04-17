@@ -1,11 +1,16 @@
 # A decade of Air Pollution and Pm2.5 Risk
  
 **Team Members:** Yelena Shabanova (320991), Alena Seliutina (323591), Alisa Lamina (321961), Luis Fernando Henriquez Patino (314661)
-> **Mission:** Air pollution remains one of the most critical public health challenges in Europe. PM2.5 — fine particulate matter smaller than 2.5 micrometers — can penetrate deep into the lungs and enter the bloodstream, causing respiratory inflammation, reduced lung function, and increased mortality risk. This project analyses ten years of EEA air quality data to understand the **spatial and urban drivers of PM2.5** 
-> and build a model capable of predicting pollution levels across locations.
 
 ---
+Air pollution is one of Europe’s most persistent public health threats, and PM2.5 is the invisible driver: particles small enough to reach the bloodstream, and widespread enough to affect entire regions.
+In A Decade of Air Pollution and PM2.5 Risk, we analyzed ten years of EEA air quality data to understand the **spatial and urban drivers of PM2.5** and build a model capable of predicting pollution levels across locations to answer two practical questions:
 
+>Where are PM2.5 hotspots forming, and why?  
+
+>Can we reliably predict pollution levels in places with limited monitoring?
+
+From Europe-wide comparisons to Italy’s North–South gradient (and the Po Valley problem), we turn raw monitoring data into actionable insights and a predictive modeling pipeline designed for real-world use: forecasting, early-warning planning, and policy simulation.
 ## Contents
 
 1. [Project Setup](#1-project-setup)
@@ -24,8 +29,9 @@
 
 ```bash
 pip install pandas numpy matplotlib seaborn plotly kaleido
-pip install geopandas
+pip install geopandas shapely fiona pyproj
 pip install scikit-learn xgboost shap
+pip install scipy
 pip install requests
 ```
 
@@ -121,8 +127,9 @@ EEA data provides annual aggregates only. To capture **seasonal dynamics** (e.g.
 ## 3. Exploratory Data Analysis
 
 
-Pollution is not distributed equally across regions. Its levels are influenced by geography, urban infrastructure, and human activity. The EDA is structured to progressively reveal these drivers and motivate every feature included in the final model.
+Pollution is not distributed equally across regions. Its levels are influenced by geography, urban infrastructure, and human activity. The EDA is structured to reveal these drivers and motivate every feature included in the final model.
 > **`eda.ipynb`** — full EDA including data quality checks, univariate distributions, temporal trends, geographic patterns, and identification of key features for modelling.
+Primary outputs saved to [images/](images/)
 
 
 ### [3.1 Data Quality Assessment](eda.ipynb#data-quality-assessment)
@@ -286,30 +293,34 @@ Pollutant co-occurrence patterns reveal shared emission sources. NO₂, PM10, an
 To better understand spatial and temporal pollution dynamics, we aggregate station-level measurements to the city–year level. For each city and year, pollutant concentrations are computed as the median across available monitoring stations.
 This aggregated dataset is then enriched with external population data (UN + EEA fallback), allowing us to visualise how pollution patterns evolve across Italian cities over time.
 
-### Map 3: WHO vs EU limit exceedance (comune level)
+Here we provide an overiew of the most relevant one map.
+#### Map 3: WHO vs EU limit exceedance (comune level)
+Each municipality is coloured by **how many times** its annual median PM2.5 (from EEA stations assigned to that comune) exceeds the **WHO annual guideline** (5 µg/m³). 
+Categories: `<1×` (meets guideline), then `1–2×`, `2–3×`, `3–4×`, and `4×+`. Comuni without a linked PM2.5 observation in 2024 are shown in **grey** (“No data”). The map uses a rotated basemap; **red** outline ≈ Po Valley, **blue** circle ≈ Tuscany / Umbria cluster, **orange** circle ≈ greater Naples (Campania).
+
+![images/map_who_eu.png](images/map_who_eu.png)
 This map compares **annual median PM2.5** (aggregated from EEA stations spatially linked to each comune) to the **WHO annual guideline of 5 µg/m³**. Colours are **multiplicative exceedance factors**, not the EEA AQI and not EU legal limits: a value of **2×** means concentrations are roughly twice the WHO benchmark.
 
 **Pattern:** The **Po Valley** (red outline) stands out as the largest continuous area of **high factors** (often **2–3×** and pockets of **3–4×** or **4×+**), consistent with winter stagnation, industry, and dense traffic. **Central Italy** (blue circle) shows a secondary cluster of elevated factors relative to much of the peninsula. **Campania / Naples** (orange circle) repeats a well-known Southern hotspot where local emissions and basin topography lift PM2.5. **White / light** comuni are at or below the WHO guideline among those with data; **grey** comuni had **no PM2.5 record in 2024** in this pipeline, so they should not be read as “clean” — only as **unmonitored** in the merged station–comune layer.
 
 **Caveat:** Values reflect **where monitors exist** and how stations map to comuni; sparse coverage can leave large areas grey and may over-represent urbanised comuni with stations.
-- **Below WHO** — meets WHO guidelines.
-- **Exceeds WHO only** — above WHO but within EU limits.
-- **Exceeds EU limit** — above EU limit.
 
-Use the year slider to explore 2015–2024.
-![images/map_who_eu.png](images/map_who_eu.png)
+### Explanatory Data Analysis Conclusion
+As our EDA shows, air pollution is not only driven by emissions. It is also shaped by geography and atmospheric conditions that can prevent pollutants from dispersing, allowing fine particles to accumulate near the ground. Among these pollutants, PM2.5 is one of the most harmful, because it can penetrate deep into the lungs and enter the bloodstream.
 
+For this reason, our project focuses on modeling PM2.5 concentrations with special attention to geographic “trap” areas where dispersion is structurally limited, such as the Po Valley and other basin-like urban environments (for example, the Naples area). 
+By combining 10 years of EEA air-quality statistics with weather, land cover, and urban context, we aim to predict PM2.5 levels across locations
 ---
 
 ## 4. Feature Engineering
 
 > **`features.ipynb`** — takes features `eda.ipynb` and builds the complete feature matrix for model training. Runs end-to-end with no intermediate files required.  
-> **Output:** `df_model.csv` (annual) and `df_model_monthly.csv` (monthly with lags and weather).
+> **Output:** [df_model.csv](df_model.csv) (annual) and [df_model_monthly.csv](df_model_monthly.csv) (monthly with lags and weather).
 
 ### [4.1 Annual Feature Matrix](features.ipynb#feature-correlation-heatmap):
 
 Feature Correlation Heatmap
-The annual matrix (`df_model.csv`) aggregates EEA station-year records into one row per `(station × year)` for Italian PM2.5 stations. 
+The annual matrix ([df_model.csv](df_model.csv)) aggregates EEA station-year records into one row per `(station × year)` for Italian PM2.5 stations. 
 Features are collected from EDA findings:
 
 | Feature | Source | EDA Motivation |
@@ -335,9 +346,9 @@ For this reason, we transition from an annual feature matrix to a **monthly mode
 This allows the model to capture short-term spikes and improves predictive performance.
 
 Three-step process:
-1. **Station coverage check** — match each EEA station to the nearest OpenAQ location within 1 km (cached in `openaq/openaq_coverage.csv`).
-2. **Sensor discovery** — retrieve sensor IDs for PM2.5, PM10, NO₂, and O₃ per matched location (cached in `openaq/openaq_sensors.csv`).
-3. **Monthly data pull** — fetch monthly aggregated measurements for 2020–2024 via `/v3/sensors/{id}/days/monthly` (cached in `openaq/openaq_monthly_raw.csv`).
+1. **Station coverage check** — match each EEA station to the nearest OpenAQ location within 1 km (cached in [openaq/openaq_coverage.csv](openaq/openaq_coverage.csv)).
+2. **Sensor discovery** — retrieve sensor IDs for PM2.5, PM10, NO₂, and O₃ per matched location (cached in [openaq/openaq_sensors.csv](openaq/openaq_sensors.csv)).
+3. **Monthly data pull** — fetch monthly aggregated measurements for 2020–2024 via `/v3/sensors/{id}/days/monthly` (cached in [openaq/openaq_monthly_raw.csv](openaq/openaq_monthly_raw.csv)).
 
 Coverage was restricted to 2020+ because only 20 PM2.5 sensors were available before 2020, against 145 from 2020 onward. Using pre-2020 annual EEA values as fill would flatten seasonal variation and introduce **data leakage** (annual EEA median computed from the full calendar year, including future test months).
 
@@ -371,7 +382,7 @@ Seasonal encoding uses **sin/cos** of month index so December is numerically adj
 
 ### [4.5 Final Monthly Correlation Matrix](features.ipynb#feature-correlation-heatmap-monthly)
 
-To validate the relationships between the engineered features, we analyzed the correlation structure of the final monthly dataset (`df_model_monthly.csv`):
+To validate the relationships between the engineered features, we analyzed the correlation structure of the final monthly dataset ([df_model_monthly.csv](df_model_monthly.csv)):
 
 | Column group | Features |
 |---|---|
@@ -394,7 +405,7 @@ Overall, the correlation structure confirms that the selected features capture b
 
 ## 5. Modeling
 
-> **`model.ipynb`** — three models evaluated under two split strategies. Primary outputs saved to `model_output/`.
+> **`model.ipynb`** — three models evaluated under two split strategies. Primary outputs saved to [model_output/](model_output/).
 
 ### Architecture Overview
 
@@ -459,8 +470,8 @@ With lags available, `PM2_5_lag1` and `PM2_5_roll3_mean` dominate the SHAP ranki
 Ridge uses the same feature set as Model A. It provides interpretable signed coefficients and a linear performance baseline for comparison.
 
 **Performance (Ridge):**
-- Time split: MAE ≈ 5.21, RMSE ≈ 10.00, R² ≈ 0.35
-- Spatial split: MAE ≈ 4.92, RMSE ≈ 6.84, R² ≈ 0.32
+- Time split: MAE ≈ 5.21, RMSE ≈ 11.77, R² = 0.101,
+- Spatial split: MAE ≈ 4.92, RMSE = 7.02,  R² = 0.282
 
 **Coefficient analysis:** Positive coefficients increase predicted PM2.5; negative coefficients decrease it. City indicators have the strongest impact, suggesting location dominates. Temperature carries a negative coefficient — higher temperatures are associated with lower PM2.5 (consistent with SHAP findings in Model A).
 
@@ -520,7 +531,48 @@ Overall, these results confirm that PM2.5 dynamics are driven by **non-linear re
 | **Model B** (RF – With Lags) | Spatial | **4.75** | **2.90** | **0.671** |
 | **Model C** (Ridge) | Spatial | 7.02 | 4.90 | 0.282 |
 
----
+
+## [Policy Translation](model.ipynb#policy-Translation)
+
+This section takes the combined model outputs and translates them into actionable policy insights.
+
+Features that ranked highly in **both** Model A (SHAP importance) and Model C (Ridge coefficient magnitude) are treated as the most robust signals — confirmed by two independent modelling approaches from different angles. 
+Each feature is then mapped to a recommended policy action based on its direction and domain context.
+### Cross-Model Signal Construction
+
+To identify the strongest and most reliable drivers, we compute a **cross-model strength score**:
+
+- Model A → mean absolute SHAP value (impact magnitude)
+- Model C → absolute Ridge coefficient (linear effect size)
+
+These are combined as: 
+>`cross_model_strength` = `mean_abs_shap` × `|ridge_coefficient|`
+
+
+This highlights features that are consistently important across both models.
+
+The top signals are saved in [policy_feature_signals.csv](model_output/policy_feature_signals.csv)
+
+
+Each feature is then mapped to a concrete policy action using domain-driven rules:
+
+| Feature (from model) | Interpretation | Policy Action |
+|---------------------|--------------|-------------|
+| `green_ratio` | Urban vegetation coverage | Increase green infrastructure (parks, trees) |
+| `temp_mean`, `temp_mean_lag1` | Temperature level & persistence | Seasonal interventions (winter anti-inversion plans) |
+| `precip_sum`, `precip_sum_lag1` | Rain-driven pollutant cleaning | Reinforce mitigation during dry periods |
+| `wind_speed_mean`, `wind_speed_mean_lag1` | Air dispersion capacity | Design ventilation corridors in cities |
+| `month_sin`, `month_cos` | Seasonality cycles | Time-targeted pollution control policies |
+| `no2_mean`, `pm10_mean` | Co-pollutants | Reduce traffic and combustion emissions |
+| `pm25_lag1`, `pm25_roll3` | Pollution persistence | Early warning systems and short-term forecasts |
+| `latitude`, `longitude`, `altitude` | Geographic structure | Region-specific policies |
+| `population_density` | Urban pressure | Focus interventions in dense areas |
+| `station_area`, `station_type` | Urban vs rural vs traffic zones | Zone-specific regulations |
+
+The strongest cross-model signals are seasonality (`month_cos`, `Season_Winter`, `Temp_Mean`), geography (`Latitude`, `Longitude`, `Altitude`), and urban structure (`Station_Area_Suburban`, `Population_Density`, `Station_Type_Traffic`).
+Additional policy mappings are also defined for features related to wind, precipitation, greening, pollutant co-exposure, persistence, and station context when these appear among the top shared signals.
+
+Final recommended actions are saved in [policy_actions.csv](model_output/policy_actions.csv)
 
 ## 6. Conclusion & Business Insights
 
@@ -566,6 +618,3 @@ This analysis is directly relevant to:
 - **Urban planners** — quantified ROI on green infrastructure, land use zoning, and traffic policy
 - **Municipal governments** — monthly early-warning tools for smog season preparation
 
----
-
-*Project developed for the Accenture Data Science Challenge. Data source: European Environment Agency (EEA) Annual Air Quality Statistics 2015–2024.*
