@@ -429,7 +429,7 @@ Overall, the correlation structure confirms that the selected features capture b
 ### [Model A — Environmental & Spatial (RF + XGBoost)](model.ipynb#model-a-random-forest--xgboost)
 
 
-Model A uses only non-pollutant features: `seasonality, weather, geographic coordinates, green ratio, population density, and station metadata`. This allows interpreting structural environmental drivers of PM2.5 without relying on pollutant inputs that may not be available at prediction time.
+Model A uses only non-pollutant features: `seasonality, weather + previous month weather, geographic coordinates, green ratio, population density, and station metadata`. This allows interpreting structural environmental drivers of PM2.5 without relying on pollutant inputs that may not be available at prediction time.
 
 Two algorithms are trained on both splits; the **champion is selected by lowest average RMSE across both splits**. 
 The winner is then retrained on the full dataset for SHAP analysis.
@@ -518,8 +518,8 @@ In the spatial split, the difference becomes even clearer. Model A maintains a *
 
 The comparison of the top shared features reveals clear differences in how the two models rely on the same variables.
 Overall, Model A concentrates importance in a few key drivers, whereas Model C spreads importance across many features, confirming that linear models struggle to isolate the dominant non-linear factors driving PM2.5.
-
 ![Model A vs C shared features](images/modela_modelc_feature_effect_comparison.png)
+
 --- 
 
 ### Key takeaway
@@ -528,17 +528,18 @@ Overall, these results confirm that PM2.5 dynamics are driven by **non-linear re
 
 ### Overall Model Performance
 
-| Model | Split | RMSE | MAE | R² |
-|---|---|---|---|---|
-| **Model A** (RF – No Lags) | Time | 10.47 | 4.38 | 0.289 |
-| **Model B** (RF – With Lags) | Time | 10.46 | 4.31 | 0.290 |
-| **Model C** (Ridge) | Time | 11.77 | 6.04 | 0.101 |
-| **Model A** (RF – No Lags) | Spatial | 6.00 | 3.86 | 0.474 |
-| **Model B** (RF – With Lags) | Spatial | **4.75** | **2.90** | **0.671** |
-| **Model C** (Ridge) | Spatial | 7.02 | 4.90 | 0.282 |
+| Model                               | Split | RMSE | MAE | R² |
+|-------------------------------------|---|---|---|---|
+| **Model A** (RF – No co-pollutants) | Time | 10.47 | 4.38 | 0.289 |
+| **Model B** (RF – With Lags)        | Time | 10.46 | 4.31 | 0.290 |
+| **Model C** (Ridge)                 | Time | 11.77 | 6.04 | 0.101 |
+| **Model A** (RF – No co-pollutants)          | Spatial | 6.00 | 3.86 | 0.474 |
+| **Model B** (RF – With Lags)        | Spatial | **4.75** | **2.90** | **0.671** |
+| **Model C** (Ridge)                 | Spatial | 7.02 | 4.90 | 0.282 |
+ 
+>**Note:** While Model A is described as a baseline model, it includes a small number of lagged weather features. In contrast, Model B incorporates a comprehensive set of lagged variables (including pollutants and PM2.5), making it a fully temporal model.
 
-
-## [Policy Translation](model.ipynb#policy-Translation)
+### [Policy Translation](model.ipynb#policy-Translation)
 
 This section takes the combined model outputs and translates them into actionable policy insights.
 
