@@ -293,7 +293,7 @@ Pollutant co-occurrence patterns reveal shared emission sources. NO₂, PM10, an
 To better understand spatial and temporal pollution dynamics, we aggregate station-level measurements to the city–year level. For each city and year, pollutant concentrations are computed as the median across available monitoring stations.
 This aggregated dataset is then enriched with external population data (UN + EEA fallback), allowing us to visualise how pollution patterns evolve across Italian cities over time.
 
-Here we provide an overiew of the most relevant one map.
+Below, we highlight the key takeaways from our most relevant map.
 #### Map 3: WHO vs EU limit exceedance (comune level)
 Each municipality is coloured by **how many times** its annual median PM2.5 (from EEA stations assigned to that comune) exceeds the **WHO annual guideline** (5 µg/m³). 
 Categories: `<1×` (meets guideline), then `1–2×`, `2–3×`, `3–4×`, and `4×+`. Comuni without a linked PM2.5 observation in 2024 are shown in **grey** (“No data”). The map uses a rotated basemap; **red** outline ≈ Po Valley, **blue** circle ≈ Tuscany / Umbria cluster, **orange** circle ≈ greater Naples (Campania).
@@ -310,6 +310,7 @@ As our EDA shows, air pollution is not only driven by emissions. It is also shap
 
 For this reason, our project focuses on modeling PM2.5 concentrations with special attention to geographic “trap” areas where dispersion is structurally limited, such as the Po Valley and other basin-like urban environments (for example, the Naples area). 
 By combining 10 years of EEA air-quality statistics with weather, land cover, and urban context, we aim to predict PM2.5 levels across locations
+
 ---
 
 ## 4. Feature Engineering
@@ -400,7 +401,9 @@ To validate the relationships between the engineered features, we analyzed the c
 
 
 ![Feature correlation heatmap](images/correlation_heatmap_monthly.png)
+
 Overall, the correlation structure confirms that the selected features capture both environmental and human-driven factors, providing a strong foundation for predictive modeling.
+
 ---
 
 ## 5. Modeling
