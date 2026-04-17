@@ -414,11 +414,11 @@ Overall, the correlation structure confirms that the selected features capture b
 
 ### Architecture Overview
 
-| Model | Algorithm | Feature Set | Goal |
-|---|---|---|---|
-| **A** | Random Forest + XGBoost | Environmental, spatial, contextual (no lags) | Policy simulation: what can municipalities act on? |
+| Model | Algorithm | Feature Set                                                          | Goal |
+|---|---|----------------------------------------------------------------------|---|
+| **A** | Random Forest + XGBoost | Environmental, spatial, contextual (no co-pollutants)                | Policy simulation: what can municipalities act on? |
 | **B** | Random Forest | All features + PM2.5 lags, rolling stats, lagged pollutants, weather | Accuracy benchmark |
-| **C** | Ridge Regression | Same as Model A | Linear baseline with signed coefficients |
+| **C** | Ridge Regression | Same as Model A                                                      | Linear baseline with signed coefficients |
 
 **Two evaluation splits:**
 - **Time split:** train on earlier months (80%), test on later months (20%) — simulates real forecasting.
