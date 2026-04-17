@@ -105,7 +105,7 @@ After merging, the combined dataset contains approximately **468,000 observation
 
 ### Country Comparison Dataset
 
-To contextualise Italian pollution levels, additional data was loaded for **France (FR), Switzerland (CH), and Austria (AT)** from the `country_comparison/` folder. This allows direct cross-border comparisons of pollutant medians.
+To contextualize Italian pollution levels, additional data was loaded for **France (FR), Switzerland (CH), and Austria (AT)** from the [country_comparison/](country_comparison/) folder. This allows direct cross-border comparisons of pollutant medians.
 
 ### Population Data (UN + ISTAT)
 
@@ -210,7 +210,8 @@ Three events make this decade analytically interesting: **COVID-19 lockdowns (20
 - A visible drop in 2020 for traffic-related pollutants (NO₂, PM) confirms that human activity directly drives pollution.
 - A consistent downward trend from 2015 onward supports the effectiveness of EU Clean Air policies.
 - Secondary pollutants (SO₂, CO, C₆H₆) show relatively stable or gradually declining trends, 
-suggesting that industrial combustion and fuel-related emissions have improved steadily over the last decade, though at a slower pace than traffic-related pollutants
+suggesting that industrial combustion and fuel-related emissions have improved steadily over the last decade, though at a slower pace than traffic-related pollutants.
+
 ![Secondary pollutant trends](images/YoY_secondary_pollutans_median.png)
 
 >  **Important note:** Since there is no 2014 data, it's impossible to calculate 2015 change.
@@ -273,7 +274,8 @@ Findings were provided in the section
 
 ![density_vs_pollution.png](images/density_vs_pollution.png)
 
-This graph confirmed a positive relationship between population density and PM2.5 concentrations. Cities with higher population density tend to experience increased air pollution
+This graph confirmed a positive relationship between population density and PM2.5 concentrations. 
+Cities with higher population density tend to experience increased air pollution.
 > **Connection to [Feature Engineering](#4-feature-engineering):** `Population_Density` is included as a proxy for human activity intensity.
 
 ---
@@ -286,7 +288,7 @@ Pollutant co-occurrence patterns reveal shared emission sources. NO₂, PM10, an
 ![Extended correlation matrix](images/extended_correlation_matrix.png)
 ![Pollutant pairs scatterplot](images/pairs_pollutants_scatterplot.png)
 
-**Business insight:** If NO₂ and PM are strongly correlated, targeting one source (e.g. reducing car traffic) tends to improve multiple pollutants simultaneously.
+>**Business insight:** If NO₂ and PM are strongly correlated, targeting one source (e.g. reducing car traffic) tends to improve multiple pollutants simultaneously.
 
 ### [Dynamic city-level maps](eda.ipynb#dynamic-city-level-maps)
 
@@ -316,7 +318,7 @@ By combining 10 years of EEA air-quality statistics with weather, land cover, an
 ## 4. Feature Engineering
 
 > **`features.ipynb`** — takes features `eda.ipynb` and builds the complete feature matrix for model training. Runs end-to-end with no intermediate files required.  
-> **Output:** [df_model.csv](df_model.csv) (annual) and [df_model_monthly.csv](df_model_monthly.csv) (monthly with lags and weather).
+> **Output:** [df_model.csv](df_model.csv) (annual) and [df_model_monthly.csv](df_model_monthly.csv) (monthly with lags and weather)
 
 ### [4.1 Annual Feature Matrix](features.ipynb#feature-correlation-heatmap):
 
@@ -408,7 +410,7 @@ Overall, the correlation structure confirms that the selected features capture b
 
 ## 5. Modeling
 
-> **`model.ipynb`** — three models evaluated under two split strategies. Primary outputs saved to [model_output/](model_output/).
+> **`model.ipynb`** — three models evaluated under two split strategies. Primary outputs saved to [model_output/](model_output/)
 
 ### Architecture Overview
 
@@ -555,7 +557,7 @@ These are combined as:
 
 This highlights features that are consistently important across both models.
 
-The top signals are saved in [policy_feature_signals.csv](model_output/policy_feature_signals.csv)
+The top signals are saved in [policy_feature_signals.csv](model_output/policy_feature_signals.csv).
 
 
 Each feature is then mapped to a concrete policy action using domain-driven rules:
@@ -576,7 +578,7 @@ Each feature is then mapped to a concrete policy action using domain-driven rule
 The strongest cross-model signals are seasonality (`month_cos`, `Season_Winter`, `Temp_Mean`), geography (`Latitude`, `Longitude`, `Altitude`), and urban structure (`Station_Area_Suburban`, `Population_Density`, `Station_Type_Traffic`).
 Additional policy mappings are also defined for features related to wind, precipitation, greening, pollutant co-exposure, persistence, and station context when these appear among the top shared signals.
 
-Final recommended actions are saved in [policy_actions.csv](model_output/policy_actions.csv)
+Final recommended actions are saved in [policy_actions.csv](model_output/policy_actions.csv).
 
 ## 6. Conclusion & Business Insights
 
