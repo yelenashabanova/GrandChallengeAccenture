@@ -516,6 +516,7 @@ In the spatial split, the difference becomes even clearer. Model A maintains a *
 
 The comparison of the top shared features reveals clear differences in how the two models rely on the same variables.
 Overall, Model A concentrates importance in a few key drivers, whereas Model C spreads importance across many features, confirming that linear models struggle to isolate the dominant non-linear factors driving PM2.5.
+
 ![Model A vs C shared features](images/modela_modelc_feature_effect_comparison.png)
 --- 
 
